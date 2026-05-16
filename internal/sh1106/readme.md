@@ -2,6 +2,8 @@
 
 This package provides a driver for the sh1106 display chipset.
 
+> It is largely a conversion of the python WaveShare demo code from here: <https://files.waveshare.com/upload/5/53/1.3inch-OLED-HAT-Code.7z>, adapted to use the [periph.io](https://periph.io/) library
+
 The driver uses eight 'pages' of 128 bytes. Each page is a row across the screen, 8 pixels high and 128 wide. As each byte is 8 bits, each byte corresponds to a column in a page, with its bits setting a pixel on or off.
 
 This in theory allows setting individual pages rather than the whole screen - the current implementation is simplified and just expects all pages to be given when displaying.
