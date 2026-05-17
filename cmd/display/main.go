@@ -1,28 +1,36 @@
 package main
 
 import (
+	_ "embed"
+	"fmt"
 	"log"
 
-	"github.com/chrispritchard/oled-clock/internal/sh1106"
+	"github.com/chrispritchard/pcf"
 )
 
+//go:embed ProggyCleanSZ.pcf
+var proggy []byte
+
 func main() {
-	disp, err := sh1106.NewSH1106()
-	if err != nil {
-		log.Fatalf("Failed to initialize SH1106: %v", err)
+
+	pf, e := pcf.Parse(proggy)
+	if e != nil {
+		log.Fatal(e)
 	}
+	b, _, _, _ := pf.Lookup('h')
+	fmt.Println(b)
 
-	disp.Init()
-	disp.Clear()
+	// disp, err := sh1106.NewSH1106()
+	// if err != nil {
+	// 	log.Fatalf("Failed to initialize SH1106: %v", err)
+	// }
 
-	var buffer [8][128]byte
+	// disp.Init()
+	// disp.Clear()
 
-	for x := 32; x < 96; x++ {
-		buffer[3][x] = 0xff
-		buffer[4][x] = 0xff
-	}
+	// var buffer [8][128]byte
 
-	disp.ShowImage(buffer)
+	// disp.ShowImage(buffer)
 
-	select {}
+	// select {}
 }

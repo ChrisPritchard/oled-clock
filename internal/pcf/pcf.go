@@ -18,7 +18,7 @@ func Parse(data []byte) (any, error) {
 		return nil, fmt.Errorf("file too small")
 	}
 
-	// Check magic header
+	// magic header
 	if string(data[0:4]) != "\x01fcp" {
 		return nil, fmt.Errorf("invalid PCF magic header")
 	}
@@ -33,6 +33,8 @@ func Parse(data []byte) (any, error) {
 		}
 		tocTables[i] = toc
 	}
+
+	// only need three tables: PCF_METRICS (sizes), PCF_BITMAPS (pixel data) and PCF_BDF_ENCODINGS (mappings to characters)
 
 	fmt.Println(tocTables)
 
