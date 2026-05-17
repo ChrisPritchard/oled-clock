@@ -38,107 +38,90 @@ func parseTOC(source []byte) (TOC, error) {
 	}, nil
 }
 
-type CompressedMetric struct {
-	left_sided_bearing uint8
-	right_side_bearing uint8
-	character_width    uint8
-	character_ascent   uint8
-	character_descent  uint8
+type Metric struct {
+	LeftSidedBearing uint16
+	RightSideBearing uint16
+	CharacterWidth   uint16
+	CharacterAscent  uint16
+	CharacterDescent uint16
 }
 
-func parseCompressedMetric(source []byte) CompressedMetric {
-	return CompressedMetric{
-		left_sided_bearing: source[0],
-		right_side_bearing: source[1],
-		character_width:    source[2],
-		character_ascent:   source[3],
-		character_descent:  source[4],
+func parseCompressedMetric(source []byte) Metric {
+	return Metric{
+		LeftSidedBearing: uint16(source[0]),
+		RightSideBearing: uint16(source[1]),
+		CharacterWidth:   uint16(source[2]),
+		CharacterAscent:  uint16(source[3]),
+		CharacterDescent: uint16(source[4]),
 	}
 }
 
-type UncompressedMetric struct {
-	left_sided_bearing uint16
-	right_side_bearing uint16
-	character_width    uint16
-	character_ascent   uint16
-	character_descent  uint16
-}
-
-func parseUncompressedMetric(source []byte) UncompressedMetric {
-	return UncompressedMetric{
-		left_sided_bearing: binary.BigEndian.Uint16(source[0:2]),
-		right_side_bearing: binary.BigEndian.Uint16(source[2:4]),
-		character_width:    binary.BigEndian.Uint16(source[4:6]),
-		character_ascent:   binary.BigEndian.Uint16(source[6:8]),
-		character_descent:  binary.BigEndian.Uint16(source[8:10]),
+func parseUncompressedMetric(source []byte, byteOrder binary.ByteOrder) Metric {
+	return Metric{
+		LeftSidedBearing: byteOrder.Uint16(source[0:2]),
+		RightSideBearing: byteOrder.Uint16(source[2:4]),
+		CharacterWidth:   byteOrder.Uint16(source[4:6]),
+		CharacterAscent:  byteOrder.Uint16(source[6:8]),
+		CharacterDescent: byteOrder.Uint16(source[8:10]),
 	}
 }
 
-type CompressedMetricsTable struct {
-	format        uint32
-	metrics_count uint16
-	metrics       []CompressedMetric
+type MetricsTable struct {
+	Format       uint32
+	MetricsCount int
+	Metrics      []Metric
 }
 
-func parseCompressedMetricsTable(source []byte) (CompressedMetricsTable, error) {
-	if len(source) < minLenCompressedMetricTable {
-		return CompressedMetricsTable{}, fmt.Errorf("CompressedMetricTable parsing failure: expected at least %d bytes, but got %d", minLenCompressedMetricTable, len(source))
+func parseMetricsTable(source []byte, isCompressed bool) (MetricsTable, error) {
+	tableLen := minLenCompressedMetricTable
+	metricLen := lenCompressedMetric
+
+	if !isCompressed {
+		tableLen = minLenUncompressedMetricTable
+		metricLen = lenUncompressedMetric
+	}
+
+	if len(source) < tableLen {
+		return MetricsTable{}, fmt.Errorf("MetricsTable parsing failure: expected at least %d bytes, got %d", tableLen, len(source))
 	}
 
 	format := lsbint32(source[0:4])
-	count := binary.BigEndian.Uint16(source[4:6])
 
-	expectedLen := int(minLenCompressedMetricTable + (count * lenCompressedMetric))
-	if len(source) != expectedLen {
-		return CompressedMetricsTable{}, fmt.Errorf("CompressedMetricTable parsing failure: expected %d bytes, but got %d", expectedLen, len(source))
+	var byteOrder binary.ByteOrder
+	if (format & 4) != 0 {
+		byteOrder = binary.LittleEndian
+	} else {
+		byteOrder = binary.BigEndian
 	}
 
-	metrics := make([]CompressedMetric, count)
+	var metricsCount int
 
-	for i := range count {
-		os := minLenCompressedMetricTable + i*lenCompressedMetric
-		metric := parseCompressedMetric(source[os : os+lenCompressedMetric])
-		metrics[i] = metric
+	if isCompressed {
+		metricsCount = int(byteOrder.Uint16(source[4:6]))
+	} else {
+		metricsCount = int(byteOrder.Uint32(source[4:8]))
 	}
 
-	return CompressedMetricsTable{
-		format:        format,
-		metrics_count: count,
-		metrics:       metrics,
-	}, nil
-}
-
-type UncompressedMetricsTable struct {
-	format        uint32
-	metrics_count uint32
-	metrics       []UncompressedMetric
-}
-
-func parseUncompressedMetricsTable(source []byte) (UncompressedMetricsTable, error) {
-	if len(source) < minLenUncompressedMetricTable {
-		return UncompressedMetricsTable{}, fmt.Errorf("UncompressedMetricTable parsing failure: expected at least %d bytes, but got %d", minLenCompressedMetricTable, len(source))
+	expectedLen := tableLen + metricsCount*metricLen
+	if len(source) < expectedLen {
+		return MetricsTable{}, fmt.Errorf("MetricsTable parsing failure: expected at least %d bytes for compressed metrics, got %d", expectedLen, len(source))
 	}
 
-	format := lsbint32(source[0:4])
-	count := binary.BigEndian.Uint32(source[4:6])
-
-	expectedLen := int(minLenUncompressedMetricTable + (count * lenUncompressedMetric))
-	if len(source) != expectedLen {
-		return UncompressedMetricsTable{}, fmt.Errorf("UncompressedMetricTable parsing failure: expected %d bytes, but got %d", expectedLen, len(source))
+	metrics := make([]Metric, metricsCount)
+	for i := range metricsCount {
+		offset := tableLen + int(i)*metricLen
+		data := source[offset : offset+metricLen]
+		if isCompressed {
+			metrics[i] = parseCompressedMetric(data)
+		} else {
+			metrics[i] = parseUncompressedMetric(data, byteOrder)
+		}
 	}
 
-	metrics := make([]UncompressedMetric, count)
-
-	for i := range count {
-		os := minLenUncompressedMetricTable + i*lenUncompressedMetric
-		metric := parseUncompressedMetric(source[os : os+lenUncompressedMetric])
-		metrics[i] = metric
-	}
-
-	return UncompressedMetricsTable{
-		format:        format,
-		metrics_count: count,
-		metrics:       metrics,
+	return MetricsTable{
+		Format:       format,
+		MetricsCount: metricsCount,
+		Metrics:      metrics,
 	}, nil
 }
 
@@ -154,28 +137,36 @@ type EncodingsTable struct {
 
 func parseEncodingsTable(source []byte) (EncodingsTable, error) {
 	if len(source) < minLenEncodingsTable {
-		return EncodingsTable{}, fmt.Errorf("EncodingsTable parsing failure: expected at least %d bytes, but got %d", minLenCompressedMetricTable, len(source))
+		return EncodingsTable{}, fmt.Errorf("EncodingsTable parsing failure: expected at least %d bytes, but got %d", minLenEncodingsTable, len(source))
 	}
 
 	format := lsbint32(source[0:4])
-	min_char_or_byte2 := binary.BigEndian.Uint16(source[4:6])
-	max_char_or_byte2 := binary.BigEndian.Uint16(source[6:8])
-	min_byte1 := binary.BigEndian.Uint16(source[8:10])
-	max_byte1 := binary.BigEndian.Uint16(source[10:12])
-	default_char := binary.BigEndian.Uint16(source[12:14])
 
-	count := (max_char_or_byte2 - min_char_or_byte2 + 1) * (max_byte1 - min_byte1 + 1)
+	var byteOrder binary.ByteOrder
+	if (format & 4) != 0 {
+		byteOrder = binary.LittleEndian
+	} else {
+		byteOrder = binary.BigEndian
+	}
 
-	expectedLen := int(minLenEncodingsTable + (count * 2))
-	if len(source) != expectedLen {
-		return EncodingsTable{}, fmt.Errorf("EncodingsTable parsing failure: expected %d bytes, but got %d", expectedLen, len(source))
+	min_char_or_byte2 := byteOrder.Uint16(source[4:6])
+	max_char_or_byte2 := byteOrder.Uint16(source[6:8])
+	min_byte1 := byteOrder.Uint16(source[8:10])
+	max_byte1 := byteOrder.Uint16(source[10:12])
+	default_char := byteOrder.Uint16(source[12:14])
+
+	count := int((max_char_or_byte2 - min_char_or_byte2 + 1) * (max_byte1 - min_byte1 + 1))
+
+	expectedLen := minLenEncodingsTable + (count * 2)
+	if len(source) < expectedLen {
+		return EncodingsTable{}, fmt.Errorf("EncodingsTable parsing failure: expected at least %d bytes, but got %d", expectedLen, len(source))
 	}
 
 	indices := make([]uint16, count)
 
 	for i := range count {
-		os := minLenEncodingsTable + i*2
-		indices[i] = binary.BigEndian.Uint16(source[os : os+2])
+		os := minLenEncodingsTable + int(i)*2
+		indices[i] = byteOrder.Uint16(source[os : os+2])
 	}
 
 	return EncodingsTable{
@@ -203,28 +194,56 @@ func parseBitmapTable(source []byte) (BitmapTable, error) {
 	}
 
 	format := lsbint32(source[0:4])
-	glyph_count := binary.BigEndian.Uint32(source[4:8])
+
+	var byteOrder binary.ByteOrder
+	if (format & 4) != 0 {
+		byteOrder = binary.LittleEndian
+	} else {
+		byteOrder = binary.BigEndian
+	}
+
+	glyph_count := byteOrder.Uint32(source[4:8])
+
+	if len(source) < minLenBitmapTable+int(glyph_count)*4 {
+		return BitmapTable{}, fmt.Errorf("BitmapTable parsing failure: offsets array exceeds source length")
+	}
 
 	offsets := make([]uint32, glyph_count)
 	for i := range glyph_count {
 		os := minLenBitmapTable + i*4
-		offsets[i] = binary.BigEndian.Uint32(source[os : os+4])
+		offsets[i] = byteOrder.Uint32(source[os : os+4])
 	}
 
-	cur := minLenBitmapTable + glyph_count*4
+	cur := minLenBitmapTable + int(glyph_count)*4
 
 	sizes := [4]uint32{
-		binary.BigEndian.Uint32(source[cur : cur+4]),
-		binary.BigEndian.Uint32(source[cur+4 : cur+8]),
-		binary.BigEndian.Uint32(source[cur+8 : cur+12]),
-		binary.BigEndian.Uint32(source[cur+12 : cur+16]),
+		byteOrder.Uint32(source[cur : cur+4]),
+		byteOrder.Uint32(source[cur+4 : cur+8]),
+		byteOrder.Uint32(source[cur+8 : cur+12]),
+		byteOrder.Uint32(source[cur+12 : cur+16]),
 	}
+
+	bitmapSizeIndex := format & 3
+	if bitmapSizeIndex > 3 {
+		return BitmapTable{}, fmt.Errorf("BitmapTable parsing failure: invalid bitmap size index %d", bitmapSizeIndex)
+	}
+
+	expectedSize := int(sizes[bitmapSizeIndex])
+	bitmapDataStart := cur + 16
+
+	if len(source) < bitmapDataStart+expectedSize {
+		return BitmapTable{}, fmt.Errorf("BitmapTable parsing failure: bitmap data truncated. Expected %d bytes, have %d",
+			bitmapDataStart+expectedSize, len(source))
+	}
+
+	bitmap_data := make([]uint8, expectedSize)
+	copy(bitmap_data, source[bitmapDataStart:bitmapDataStart+int(expectedSize)])
 
 	return BitmapTable{
 		format:      format,
 		glyph_count: glyph_count,
 		offsets:     offsets,
 		bitmapSizes: sizes,
-		bitmap_data: []uint8{},
+		bitmap_data: bitmap_data,
 	}, nil
 }
