@@ -14,6 +14,8 @@ const (
 	minLenUncompressedMetricTable = 8
 
 	minLenEncodingsTable = 14
+
+	minLenBitmapTable = 22
 )
 
 type TOC struct {
@@ -184,5 +186,45 @@ func parseEncodingsTable(source []byte) (EncodingsTable, error) {
 		max_byte1:         max_byte1,
 		default_char:      default_char,
 		glyphindeces:      indices,
+	}, nil
+}
+
+type BitmapTable struct {
+	format      uint32
+	glyph_count uint32
+	offsets     []uint32
+	bitmapSizes [4]uint32
+	bitmap_data []uint8
+}
+
+func parseBitmapTable(source []byte) (BitmapTable, error) {
+	if len(source) < minLenBitmapTable {
+		return BitmapTable{}, fmt.Errorf("BitmapTable parsing failure: expected at least %d bytes, but got %d", minLenBitmapTable, len(source))
+	}
+
+	format := lsbint32(source[0:4])
+	glyph_count := binary.BigEndian.Uint32(source[4:8])
+
+	offsets := make([]uint32, glyph_count)
+	for i := range glyph_count {
+		os := minLenBitmapTable + i*4
+		offsets[i] = binary.BigEndian.Uint32(source[os : os+4])
+	}
+
+	cur := minLenBitmapTable + glyph_count*4
+
+	sizes := [4]uint32{
+		binary.BigEndian.Uint32(source[cur : cur+4]),
+		binary.BigEndian.Uint32(source[cur+4 : cur+8]),
+		binary.BigEndian.Uint32(source[cur+8 : cur+12]),
+		binary.BigEndian.Uint32(source[cur+12 : cur+16]),
+	}
+
+	return BitmapTable{
+		format:      format,
+		glyph_count: glyph_count,
+		offsets:     offsets,
+		bitmapSizes: sizes,
+		bitmap_data: []uint8{},
 	}, nil
 }
