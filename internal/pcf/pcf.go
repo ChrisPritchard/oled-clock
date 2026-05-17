@@ -1,9 +1,7 @@
 package pcf
 
 import (
-	"encoding/binary"
 	"fmt"
-	"log"
 )
 
 const (
@@ -19,13 +17,6 @@ type PCF struct {
 	metrics   MetricsTable
 	bitmaps   BitmapTable
 	encodings EncodingsTable
-}
-
-func lsbint32(source []byte) uint32 {
-	if len(source) != 4 {
-		log.Fatalf("expected four bytes, got %d", len(source))
-	}
-	return binary.LittleEndian.Uint32(source)
 }
 
 func NewPCF(data []byte) (PCF, error) {
@@ -50,24 +41,24 @@ func NewPCF(data []byte) (PCF, error) {
 
 		// only need three tables: PCF_METRICS (sizes), PCF_BITMAPS (pixel data) and PCF_BDF_ENCODINGS (mappings to characters)
 
-		if toc.tocType == PCF_METRICS {
+		switch toc.tocType {
+
+		case PCF_METRICS:
 			isCompressed := (toc.format & PCF_COMPRESSED_METRICS) != 0
 			metrics, err := parseMetricsTable(data[toc.offset:toc.offset+toc.size], isCompressed)
 			if err != nil {
 				return PCF{}, err
 			}
 			pcf.metrics = metrics
-		}
 
-		if toc.tocType == PCF_BITMAPS {
+		case PCF_BITMAPS:
 			bitmaps, err := parseBitmapTable(data[toc.offset : toc.offset+toc.size])
 			if err != nil {
 				return PCF{}, err
 			}
 			pcf.bitmaps = bitmaps
-		}
 
-		if toc.tocType == PCF_BDF_ENCODINGS {
+		case PCF_BDF_ENCODINGS:
 			encodings, err := parseEncodingsTable(data[toc.offset : toc.offset+toc.size])
 			if err != nil {
 				return PCF{}, err

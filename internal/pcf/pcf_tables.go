@@ -3,6 +3,7 @@ package pcf
 import (
 	"encoding/binary"
 	"fmt"
+	"log"
 )
 
 const (
@@ -17,6 +18,20 @@ const (
 
 	minLenBitmapTable = 22
 )
+
+func lsbint32(source []byte) uint32 {
+	if len(source) != 4 {
+		log.Fatalf("expected four bytes, got %d", len(source))
+	}
+	return binary.LittleEndian.Uint32(source)
+}
+
+func byteorder(format uint32) binary.ByteOrder {
+	if (format & 4) == 0 {
+		return binary.LittleEndian
+	}
+	return binary.BigEndian
+}
 
 type TOC struct {
 	tocType uint32
@@ -86,13 +101,7 @@ func parseMetricsTable(source []byte, isCompressed bool) (MetricsTable, error) {
 	}
 
 	format := lsbint32(source[0:4])
-
-	var byteOrder binary.ByteOrder
-	if (format & 4) != 0 {
-		byteOrder = binary.LittleEndian
-	} else {
-		byteOrder = binary.BigEndian
-	}
+	byteOrder := byteorder(format)
 
 	var metricsCount int
 
@@ -141,13 +150,7 @@ func parseEncodingsTable(source []byte) (EncodingsTable, error) {
 	}
 
 	format := lsbint32(source[0:4])
-
-	var byteOrder binary.ByteOrder
-	if (format & 4) != 0 {
-		byteOrder = binary.LittleEndian
-	} else {
-		byteOrder = binary.BigEndian
-	}
+	byteOrder := byteorder(format)
 
 	min_char_or_byte2 := byteOrder.Uint16(source[4:6])
 	max_char_or_byte2 := byteOrder.Uint16(source[6:8])
@@ -194,13 +197,7 @@ func parseBitmapTable(source []byte) (BitmapTable, error) {
 	}
 
 	format := lsbint32(source[0:4])
-
-	var byteOrder binary.ByteOrder
-	if (format & 4) != 0 {
-		byteOrder = binary.LittleEndian
-	} else {
-		byteOrder = binary.BigEndian
-	}
+	byteOrder := byteorder(format)
 
 	glyph_count := byteOrder.Uint32(source[4:8])
 
@@ -210,11 +207,11 @@ func parseBitmapTable(source []byte) (BitmapTable, error) {
 
 	offsets := make([]uint32, glyph_count)
 	for i := range glyph_count {
-		os := minLenBitmapTable + i*4
+		os := 8 + i*4
 		offsets[i] = byteOrder.Uint32(source[os : os+4])
 	}
 
-	cur := minLenBitmapTable + int(glyph_count)*4
+	cur := 8 + int(glyph_count)*4
 
 	sizes := [4]uint32{
 		byteOrder.Uint32(source[cur : cur+4]),
