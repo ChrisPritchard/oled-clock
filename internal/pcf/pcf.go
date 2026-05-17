@@ -6,28 +6,26 @@ import (
 )
 
 const (
-	PCF_METRICS       = 1 << 2
-	PCF_BITMAPS       = 1 << 3
-	PCF_BDF_ENCODINGS = 1 << 5
-
-	PCF_DEFAULT            = 0x00000000
-	PCF_COMPRESSED_METRICS = 0x00000100
+	pcf_metrics            = 1 << 2
+	pcf_bitmaps            = 1 << 3
+	pcf_bdf_encodings      = 1 << 5
+	pcf_compressed_metrics = 0x00000100
 )
 
 type PCF struct {
-	metrics   MetricsTable
-	bitmaps   BitmapTable
-	encodings EncodingsTable
+	metrics   metricsTable
+	bitmaps   bitmapTable
+	encodings encodingsTable
 }
 
-func NewPCF(data []byte) (PCF, error) {
+func NewPCF(data []byte) (*PCF, error) {
 	if len(data) < 8 {
-		return PCF{}, fmt.Errorf("file too small")
+		return nil, fmt.Errorf("file too small")
 	}
 
 	// magic header
 	if string(data[0:4]) != "\x01fcp" {
-		return PCF{}, fmt.Errorf("invalid PCF magic header")
+		return nil, fmt.Errorf("invalid PCF magic header")
 	}
 
 	var pcf PCF
@@ -37,44 +35,44 @@ func NewPCF(data []byte) (PCF, error) {
 		os := i * lenTOC
 		toc, err := parseTOC(data[os+8 : os+8+lenTOC])
 		if err != nil {
-			return PCF{}, err
+			return nil, err
 		}
 
 		// only need three tables: PCF_METRICS (sizes), PCF_BITMAPS (pixel data) and PCF_BDF_ENCODINGS (mappings to characters)
 
 		switch toc.tocType {
 
-		case PCF_METRICS:
-			isCompressed := (toc.format & PCF_COMPRESSED_METRICS) != 0
+		case pcf_metrics:
+			isCompressed := (toc.format & pcf_compressed_metrics) != 0
 			metrics, err := parseMetricsTable(data[toc.offset:toc.offset+toc.size], isCompressed)
 			if err != nil {
-				return PCF{}, err
+				return nil, err
 			}
 			pcf.metrics = metrics
 
-		case PCF_BITMAPS:
+		case pcf_bitmaps:
 			bitmaps, err := parseBitmapTable(data[toc.offset : toc.offset+toc.size])
 			if err != nil {
-				return PCF{}, err
+				return nil, err
 			}
 			pcf.bitmaps = bitmaps
 
-		case PCF_BDF_ENCODINGS:
+		case pcf_bdf_encodings:
 			encodings, err := parseEncodingsTable(data[toc.offset : toc.offset+toc.size])
 			if err != nil {
-				return PCF{}, err
+				return nil, err
 			}
 			pcf.encodings = encodings
 		}
 	}
 
-	return pcf, nil
+	return &pcf, nil
 }
 
-func (pcf *PCF) glyphData(r rune) ([]byte, Metric, error) {
+func (pcf *PCF) glyphData(r rune) ([]byte, metric, error) {
 	index := int(r)
 	if len(pcf.encodings.glyphindeces) < index {
-		return nil, Metric{}, fmt.Errorf("index outside of encodings")
+		return nil, metric{}, fmt.Errorf("index outside of encodings")
 	}
 
 	metric := pcf.metrics.Metrics[index]
@@ -91,7 +89,7 @@ func (pcf *PCF) glyphData(r rune) ([]byte, Metric, error) {
 	return pcf.bitmaps.bitmap_data[start:end], metric, nil
 }
 
-func (pcf *PCF) calculateStride(metrics Metric) int {
+func (pcf *PCF) calculateStride(metrics metric) int {
 	storage_unit := 1 << ((pcf.bitmaps.format >> 4) & 3) // 1=bytes, 2=shorts, 4=ints
 	scanline_pad := 1 << (pcf.bitmaps.format & 3)        // 1=bytes, 2=shorts, 4=ints
 

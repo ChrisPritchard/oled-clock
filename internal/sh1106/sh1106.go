@@ -1,6 +1,7 @@
 package sh1106
 
 import (
+	"image"
 	"log"
 	"time"
 
@@ -113,7 +114,32 @@ func (d *SH1106) Init() {
 	d.command(0xAF) // turn on oled panel
 }
 
-func (d *SH1106) ShowImage(pages [8][128]byte) {
+func (d *SH1106) ShowImage(img *image.Gray) {
+	var pages [8][128]byte
+
+	for page := range 8 {
+		for col := range 128 {
+			var byteValue byte = 0
+
+			for rowBit := range 8 {
+				y := page*8 + rowBit
+
+				if col < img.Bounds().Dx() && y < img.Bounds().Dy() {
+
+					gray := img.GrayAt(col, y).Y
+					if gray >= 128 {
+						byteValue |= 1 << uint(rowBit)
+					}
+				}
+			}
+			pages[page][col] = byteValue
+		}
+	}
+
+	d.ShowPages(pages)
+}
+
+func (d *SH1106) ShowPages(pages [8][128]byte) {
 	for p := range 8 {
 		d.command(0xB0 + byte(p)) // set page address
 		d.command(0x02)           // set low column address
@@ -133,5 +159,5 @@ func (d *SH1106) Clear() {
 			pages[p][x] = 0x00
 		}
 	}
-	d.ShowImage(pages)
+	d.ShowPages(pages)
 }
