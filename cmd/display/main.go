@@ -37,7 +37,7 @@ func main() {
 		now := time.Now()
 
 		dst := image.NewGray(image.Rect(0, 0, 128, 64))
-		offset := image.Pt(10, 10)
+		offset := image.Pt(10, 8)
 
 		nzt_img, err := timeImage(now, nzt, tick, font)
 		if err != nil {
@@ -69,6 +69,9 @@ func timeImage(now time.Time, zone *time.Location, tick bool, font *pcf.PCF) (*i
 	time_string := rel.Format("03:04 PM")
 	if tick {
 		time_string = strings.Replace(time_string, ":", " ", 1)
+	}
+	if time_string[0] == '0' {
+		time_string = " " + time_string[1:]
 	}
 	time_string = name + " " + time_string
 
