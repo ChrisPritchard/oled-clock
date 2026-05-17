@@ -7,11 +7,13 @@ import (
 
 const (
 	lenTOC                = 16
-	lenCompressedMetric   = 40
-	lenUncompressedMetric = 80
+	lenCompressedMetric   = 5
+	lenUncompressedMetric = 10
 
-	minLenCompressedMetricTable   = 48
-	minLenUncompressedMetricTable = 64
+	minLenCompressedMetricTable   = 6
+	minLenUncompressedMetricTable = 8
+
+	minLenEncodingsTable = 14
 )
 
 type TOC struct {
@@ -135,5 +137,52 @@ func parseUncompressedMetricsTable(source []byte) (UncompressedMetricsTable, err
 		format:        format,
 		metrics_count: count,
 		metrics:       metrics,
+	}, nil
+}
+
+type EncodingsTable struct {
+	format            uint32
+	min_char_or_byte2 uint16
+	max_char_or_byte2 uint16
+	min_byte1         uint16
+	max_byte1         uint16
+	default_char      uint16
+	glyphindeces      []uint16
+}
+
+func parseEncodingsTable(source []byte) (EncodingsTable, error) {
+	if len(source) < minLenEncodingsTable {
+		return EncodingsTable{}, fmt.Errorf("EncodingsTable parsing failure: expected at least %d bytes, but got %d", minLenCompressedMetricTable, len(source))
+	}
+
+	format := lsbint32(source[0:4])
+	min_char_or_byte2 := binary.BigEndian.Uint16(source[4:6])
+	max_char_or_byte2 := binary.BigEndian.Uint16(source[6:8])
+	min_byte1 := binary.BigEndian.Uint16(source[8:10])
+	max_byte1 := binary.BigEndian.Uint16(source[10:12])
+	default_char := binary.BigEndian.Uint16(source[12:14])
+
+	count := (max_char_or_byte2 - min_char_or_byte2 + 1) * (max_byte1 - min_byte1 + 1)
+
+	expectedLen := int(minLenEncodingsTable + (count * 2))
+	if len(source) != expectedLen {
+		return EncodingsTable{}, fmt.Errorf("EncodingsTable parsing failure: expected %d bytes, but got %d", expectedLen, len(source))
+	}
+
+	indices := make([]uint16, count)
+
+	for i := range count {
+		os := minLenEncodingsTable + i*2
+		indices[i] = binary.BigEndian.Uint16(source[os : os+2])
+	}
+
+	return EncodingsTable{
+		format:            format,
+		min_char_or_byte2: min_char_or_byte2,
+		max_char_or_byte2: max_char_or_byte2,
+		min_byte1:         min_byte1,
+		max_byte1:         max_byte1,
+		default_char:      default_char,
+		glyphindeces:      indices,
 	}, nil
 }
