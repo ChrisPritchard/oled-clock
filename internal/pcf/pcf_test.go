@@ -2,6 +2,7 @@ package pcf
 
 import (
 	_ "embed"
+	"fmt"
 	"testing"
 )
 
@@ -9,5 +10,10 @@ import (
 var proggy []byte
 
 func TestParsing(t *testing.T) {
-	Parse(proggy)
+	pcf, err := NewPCF(proggy)
+	if err != nil {
+		t.Error(err)
+	}
+
+	fmt.Println(pcf)
 }
