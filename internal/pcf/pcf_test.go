@@ -2,7 +2,8 @@ package pcf
 
 import (
 	_ "embed"
-	"fmt"
+	"image/png"
+	"os"
 	"testing"
 )
 
@@ -15,5 +16,19 @@ func TestParsing(t *testing.T) {
 		t.Error(err)
 	}
 
-	fmt.Println(pcf)
+	img, err := pcf.GetString("Hello World!", 20)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// ignored in git
+	f, err := os.Create("test_output.png")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	if err := png.Encode(f, img); err != nil {
+		panic(err)
+	}
 }

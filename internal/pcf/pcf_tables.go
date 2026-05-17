@@ -9,7 +9,7 @@ import (
 const (
 	lenTOC                = 16
 	lenCompressedMetric   = 5
-	lenUncompressedMetric = 10
+	lenUncompressedMetric = 12
 
 	minLenCompressedMetricTable   = 6
 	minLenUncompressedMetricTable = 8
@@ -54,30 +54,32 @@ func parseTOC(source []byte) (TOC, error) {
 }
 
 type Metric struct {
-	LeftSidedBearing uint16
-	RightSideBearing uint16
-	CharacterWidth   uint16
-	CharacterAscent  uint16
-	CharacterDescent uint16
+	LeftSidedBearing    uint16
+	RightSideBearing    uint16
+	CharacterWidth      int
+	CharacterAscent     int
+	CharacterDescent    int
+	CharacterAttributes uint16
 }
 
 func parseCompressedMetric(source []byte) Metric {
 	return Metric{
-		LeftSidedBearing: uint16(source[0]),
-		RightSideBearing: uint16(source[1]),
-		CharacterWidth:   uint16(source[2]),
-		CharacterAscent:  uint16(source[3]),
-		CharacterDescent: uint16(source[4]),
+		LeftSidedBearing: uint16(source[0] - 0x80),
+		RightSideBearing: uint16(source[1] - 0x80),
+		CharacterWidth:   int(source[2] - 0x80),
+		CharacterAscent:  int(source[3] - 0x80),
+		CharacterDescent: int(source[4] - 0x80),
 	}
 }
 
 func parseUncompressedMetric(source []byte, byteOrder binary.ByteOrder) Metric {
 	return Metric{
-		LeftSidedBearing: byteOrder.Uint16(source[0:2]),
-		RightSideBearing: byteOrder.Uint16(source[2:4]),
-		CharacterWidth:   byteOrder.Uint16(source[4:6]),
-		CharacterAscent:  byteOrder.Uint16(source[6:8]),
-		CharacterDescent: byteOrder.Uint16(source[8:10]),
+		LeftSidedBearing:    byteOrder.Uint16(source[0:2]),
+		RightSideBearing:    byteOrder.Uint16(source[2:4]),
+		CharacterWidth:      int(byteOrder.Uint16(source[4:6])),
+		CharacterAscent:     int(byteOrder.Uint16(source[6:8])),
+		CharacterDescent:    int(byteOrder.Uint16(source[8:10])),
+		CharacterAttributes: byteOrder.Uint16(source[10:12]),
 	}
 }
 
@@ -141,7 +143,7 @@ type EncodingsTable struct {
 	min_byte1         uint16
 	max_byte1         uint16
 	default_char      uint16
-	glyphindeces      []uint16
+	glyphindeces      []int
 }
 
 func parseEncodingsTable(source []byte) (EncodingsTable, error) {
@@ -165,11 +167,11 @@ func parseEncodingsTable(source []byte) (EncodingsTable, error) {
 		return EncodingsTable{}, fmt.Errorf("EncodingsTable parsing failure: expected at least %d bytes, but got %d", expectedLen, len(source))
 	}
 
-	indices := make([]uint16, count)
+	indices := make([]int, count)
 
 	for i := range count {
 		os := minLenEncodingsTable + int(i)*2
-		indices[i] = byteOrder.Uint16(source[os : os+2])
+		indices[i] = int(byteOrder.Uint16(source[os : os+2]))
 	}
 
 	return EncodingsTable{
@@ -186,7 +188,7 @@ func parseEncodingsTable(source []byte) (EncodingsTable, error) {
 type BitmapTable struct {
 	format      uint32
 	glyph_count uint32
-	offsets     []uint32
+	offsets     []int
 	bitmapSizes [4]uint32
 	bitmap_data []uint8
 }
@@ -205,10 +207,10 @@ func parseBitmapTable(source []byte) (BitmapTable, error) {
 		return BitmapTable{}, fmt.Errorf("BitmapTable parsing failure: offsets array exceeds source length")
 	}
 
-	offsets := make([]uint32, glyph_count)
+	offsets := make([]int, glyph_count)
 	for i := range glyph_count {
 		os := 8 + i*4
-		offsets[i] = byteOrder.Uint32(source[os : os+4])
+		offsets[i] = int(byteOrder.Uint32(source[os : os+4]))
 	}
 
 	cur := 8 + int(glyph_count)*4
